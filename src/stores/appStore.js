@@ -1,4 +1,4 @@
-import { computed, reactive } from 'vue'
+﻿import { computed, reactive } from 'vue'
 import { seedGames, seedReviews } from '../data/games'
 
 const STORAGE_KEY = 'gamebench-state-v1'
@@ -131,6 +131,11 @@ export function useAppStore() {
     persist()
   }
 
+  function deleteReview(id) {
+    state.reviews = state.reviews.filter((review) => review.id !== id)
+    persist()
+  }
+
   function resetDemoData() {
     state.games = seedGames.map((game) => ({ ...game, min: { ...game.min }, rec: { ...game.rec } }))
     state.reviews = seedReviews.map((review) => ({ ...review }))
@@ -150,6 +155,7 @@ export function useAppStore() {
     deleteGame,
     toggleLike,
     addReview,
+    deleteReview,
     resetDemoData,
   }
 }

@@ -1,9 +1,15 @@
-<script setup>
+﻿<script setup>
 import { computed } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useAppStore } from '../stores/appStore'
 
 const store = useAppStore()
+
+const gameTitle = (gameId) => {
+  const game = store.state.games.find((game) => game.id === gameId)
+  return game ? game.title : 'Unknown game'
+}
+
 const myReviews = computed(() =>
   store.state.reviews.filter((review) => review.author === store.state.currentUser?.name)
 )
@@ -12,7 +18,6 @@ const myReviews = computed(() =>
 <template>
   <PageHeader
     title="Member Profile"
-    text="Shows different content for authenticated and unauthenticated users, which is one of the project requirements."
   />
 
   <section class="section-band">
@@ -36,13 +41,34 @@ const myReviews = computed(() =>
             <h2 class="h4">Member actions</h2>
             <div class="d-flex flex-wrap gap-2 mb-3">
               <RouterLink class="btn btn-dark" to="/submit-game">Submit a game</RouterLink>
-              <RouterLink class="btn btn-outline-dark" to="/admin">Manage catalogue</RouterLink>
+              <RouterLink class="btn btn-dark" to="/submit-review">Submit a review</RouterLink>
               <RouterLink class="btn btn-outline-dark" to="/reviews">View reviews</RouterLink>
+            </div>
+            <div v-if="store.isAdmin.value">
+              <h2 class="h4">Admin actions</h2>
+              <div class="d-flex flex-wrap gap-2 mb-3">
+                <RouterLink class="btn btn-outline-dark" to="/admin">Manage catalogue</RouterLink>
+              </div>
             </div>
             <h3 class="h5">Your reviews</h3>
             <p v-if="myReviews.length === 0" class="text-secondary mb-0">No reviews yet.</p>
             <ul v-else class="mb-0">
-              <li v-for="review in myReviews" :key="review.id">{{ review.comment }}</li>
+              <li
+                v-for="review in myReviews"
+                :key="review.id"
+                class="d-flex align-items-center gap-2 mb-2"
+              >
+                <span class="fw-bold">{{ gameTitle(review.gameId) }}:</span>
+                <span>{{ review.comment }}</span>
+                <span class="badge text-bg-warning">{{ review.score }}/5</span>
+
+                <button
+                  class="btn btn-sm btn-outline-danger ms-auto"
+                  @click="store.deleteReview(review.id)"
+                >
+                  Delete
+                </button>
+              </li>
             </ul>
           </div>
         </div>

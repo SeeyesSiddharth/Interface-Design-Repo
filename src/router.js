@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+﻿import { createRouter, createWebHistory } from 'vue-router'
 import HomePage from './pages/HomePage.vue'
 import CataloguePage from './pages/CataloguePage.vue'
 import GameDetailPage from './pages/GameDetailPage.vue'
@@ -10,6 +10,7 @@ import LoginPage from './pages/LoginPage.vue'
 import RegisterPage from './pages/RegisterPage.vue'
 import ProfilePage from './pages/ProfilePage.vue'
 import SubmitGamePage from './pages/SubmitGamePage.vue'
+import SubmitReviewPage from './pages/SubmitReviewPage.vue'
 import AdminPage from './pages/AdminPage.vue'
 import TeamPlanPage from './pages/TeamPlanPage.vue'
 import NotFoundPage from './pages/NotFoundPage.vue'
@@ -29,6 +30,7 @@ const routes = [
   { path: '/admin', name: 'admin', component: AdminPage },
   { path: '/team-plan', name: 'team-plan', component: TeamPlanPage },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundPage },
+  { path: '/submit-review', name: 'submit-review', component: SubmitReviewPage },
 ]
 
 export default createRouter({
