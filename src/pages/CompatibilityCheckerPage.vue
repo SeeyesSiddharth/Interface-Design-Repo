@@ -9,7 +9,6 @@ const specs = reactive({
   ram: 16,
   storage: 100,
   gpuTier: 2,
-<<<<<<< HEAD
   cpuTier: 2,
 })
 
@@ -17,27 +16,12 @@ const specs = reactive({
 const game = computed(() => store.state.games.find((entry) => entry.id === Number(selectedId.value)))
 
 // GPU requirement calculation based on game specs
-=======
-})
-
-const game = computed(() => store.state.games.find((entry) => entry.id === Number(selectedId.value)))
-const score = computed(() => {
-  if (!game.value) return 0
-  let points = 0
-  if (specs.ram >= game.value.min.ram) points += 30
-  if (specs.ram >= game.value.rec.ram) points += 15
-  if (specs.storage >= game.value.rec.storage) points += 25
-  if (specs.gpuTier >= gpuNeed.value) points += 30
-  return Math.min(points, 100)
-})
->>>>>>> c5f75288b8424e7de1baff2d87fbcc91bfa3c795
 const gpuNeed = computed(() => {
   if (!game.value) return 1
   if (game.value.rec.ram >= 32 || game.value.rec.storage > 55) return 3
   if (game.value.rec.ram >= 16) return 2
   return 1
 })
-<<<<<<< HEAD
 
 // CPU requirement calculation
 const cpuNeed = computed(() => {
@@ -110,30 +94,17 @@ const scoreColor = computed(() => {
 
 // Show requirements detail function
 const showRequirements = ref(false)
-=======
-const verdict = computed(() => {
-  if (score.value >= 80) return 'Recommended experience'
-  if (score.value >= 55) return 'Playable with adjusted settings'
-  return 'Below minimum or needs careful tuning'
-})
->>>>>>> c5f75288b8424e7de1baff2d87fbcc91bfa3c795
 </script>
 
 <template>
   <PageHeader
-<<<<<<< HEAD
     title="PC Compatibility Checker"
     text="A reactive form that compares your PC specs against the selected game's requirements. Get detailed compatibility analysis and performance predictions."
-=======
-    title="Compatibility Checker"
-    text="A reactive form that compares a user's basic PC specs against the selected game's requirements."
->>>>>>> c5f75288b8424e7de1baff2d87fbcc91bfa3c795
   />
 
   <section class="section-band">
     <div class="container">
       <div class="row g-4">
-<<<<<<< HEAD
         <!-- Input Controls -->
         <div class="col-lg-5">
           <form class="content-card p-4">
@@ -347,49 +318,12 @@ const verdict = computed(() => {
             <p class="small text-secondary mb-0">
               Modern games are large. Leave extra space for updates and system files to avoid performance issues.
             </p>
-=======
-        <div class="col-lg-5">
-          <form class="content-card p-3">
-            <label class="form-label" for="checkerGame">Game</label>
-            <select id="checkerGame" v-model="selectedId" class="form-select mb-3">
-              <option v-for="entry in store.state.games" :key="entry.id" :value="entry.id">{{ entry.title }}</option>
-            </select>
-
-            <label class="form-label" for="ram">Your RAM: {{ specs.ram }} GB</label>
-            <input id="ram" v-model.number="specs.ram" class="form-range" type="range" min="4" max="64" step="4" />
-
-            <label class="form-label" for="storage">Free storage: {{ specs.storage }} GB</label>
-            <input id="storage" v-model.number="specs.storage" class="form-range" type="range" min="10" max="200" step="5" />
-
-            <label class="form-label" for="gpuTier">GPU tier</label>
-            <select id="gpuTier" v-model.number="specs.gpuTier" class="form-select">
-              <option :value="1">Entry level</option>
-              <option :value="2">Mid range</option>
-              <option :value="3">High end</option>
-            </select>
-          </form>
-        </div>
-        <div class="col-lg-7">
-          <div class="content-card p-4 h-100">
-            <p class="eyebrow mb-2">Result</p>
-            <h2>{{ verdict }}</h2>
-            <div class="requirement-meter my-3" aria-label="Compatibility score">
-              <span :style="{ width: `${score}%` }"></span>
-            </div>
-            <p class="fs-4 fw-bold">{{ score }}%</p>
-            <p class="text-secondary mb-4">
-              Recommended: {{ game?.rec.cpu }}, {{ game?.rec.gpu }}, {{ game?.rec.ram }} GB RAM,
-              {{ game?.rec.storage }} GB storage.
-            </p>
-            <RouterLink class="btn btn-dark" :to="`/games/${game?.slug}`">Open full requirements</RouterLink>
->>>>>>> c5f75288b8424e7de1baff2d87fbcc91bfa3c795
           </div>
         </div>
       </div>
     </div>
   </section>
 </template>
-<<<<<<< HEAD
 
 <style scoped>
 .requirement-meter {
@@ -447,5 +381,3 @@ const verdict = computed(() => {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 </style>
-=======
->>>>>>> c5f75288b8424e7de1baff2d87fbcc91bfa3c795
