@@ -19,6 +19,7 @@ const requirementLabel = computed(() => {
 </script>
 
 <template>
+  <RouterLink class="text-decoration-none" :to="`/games/${game.slug}`">
   <article class="game-card h-100">
     <div class="cover-panel" :class="game.coverTheme">
       <span>{{ game.genre }}</span>
@@ -46,11 +47,12 @@ const requirementLabel = computed(() => {
         </div>
       </div>
       <div class="d-flex gap-2">
-        <RouterLink class="btn btn-dark flex-grow-1" :to="`/games/${game.slug}`">View Details</RouterLink>
+        
         <button class="btn btn-outline-danger like-button" type="button" @click="store.toggleLike(game.id)">
           {{ game.likes }}
         </button>
       </div>
     </div>
   </article>
+</RouterLink>
 </template>

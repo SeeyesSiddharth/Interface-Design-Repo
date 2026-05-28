@@ -3,13 +3,15 @@ import { computed, ref } from 'vue'
 import GameCard from '../components/GameCard.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useAppStore } from '../stores/appStore'
+import Paginate from 'vuejs-paginate-next'
+
 
 const store = useAppStore()
 const search = ref('')
 const genre = ref('All')
 const sortBy = ref('rating')
 const page = ref(1)
-const perPage = 6
+const perPage = ref(6)
 
 const genres = computed(() => ['All', ...new Set(store.state.games.map((game) => game.genre))])
 
@@ -30,8 +32,13 @@ const filteredGames = computed(() => {
   })
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredGames.value.length / perPage)))
-const pagedGames = computed(() => filteredGames.value.slice((page.value - 1) * perPage, page.value * perPage))
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredGames.value.length / perPage.value)))
+const pagedGames = computed(() => {
+  const current = page.value * perPage.value
+  const start = current - perPage.value
+
+  return filteredGames.value.slice(start, current)
+})
 
 function setPage(nextPage) {
   page.value = Math.min(Math.max(nextPage, 1), totalPages.value)
@@ -79,12 +86,21 @@ function setPage(nextPage) {
           <GameCard :game="game" />
         </div>
       </div>
+      
 
       <nav class="d-flex justify-content-center gap-2 mt-4" aria-label="Catalogue pagination">
         <button class="btn btn-outline-dark" type="button" :disabled="page === 1" @click="setPage(page - 1)">Previous</button>
         <span class="btn btn-light disabled">Page {{ page }} of {{ totalPages }}</span>
         <button class="btn btn-outline-dark" type="button" :disabled="page === totalPages" @click="setPage(page + 1)">Next</button>
+        <select v-model="perPage"  class="btn btn-outline-dark" @change="setPage(1)">
+            <option :value="6">6</option>
+            <option :value="9">9</option>
+            <option :value="12">12</option>
+        </select>
       </nav>
+
+
+
     </div>
   </section>
 </template>
