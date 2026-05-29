@@ -13,7 +13,7 @@ const form = reactive({
   password: '',
 })
 
-function submit() {
+async function submit() {
   error.value = ''
   if (form.name.trim().length < 2) {
     error.value = 'Name must be at least 2 characters.'
@@ -28,9 +28,9 @@ function submit() {
     return
   }
 
-  const result = store.register({ ...form })
-  if (!result.ok) {
-    error.value = result.message
+  const success = await store.register({ ...form })
+  if (!success.ok) {
+    error.value = success.message
     return
   }
   router.push('/profile')
