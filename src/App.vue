@@ -1,5 +1,13 @@
 <script setup>
 import AppNavbar from './components/AppNavbar.vue'
+import { useAppStore } from './stores/appStore.js';
+import { onMounted } from 'vue';
+
+onMounted(() => {
+  const store = useAppStore();
+  store.loadGames();
+  store.loadReviews();
+})
 </script>
 
 <template>

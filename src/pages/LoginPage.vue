@@ -12,13 +12,14 @@ const form = reactive({
   password: 'password123',
 })
 
-function submit() {
+async function submit() {
   error.value = ''
   if (!form.email.includes('@') || form.password.length < 8) {
     error.value = 'Enter a valid email and a password with at least 8 characters.'
     return
   }
-  if (!store.login(form.email, form.password)) {
+  const success = await store.login(form.email, form.password)
+  if (!success) {
     error.value = 'No matching account was found.'
     return
   }
