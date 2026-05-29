@@ -142,6 +142,15 @@ export function useAppStore() {
     state.votes = {}
     persist()
   }
+  
+  function updateCurrentUser(fields) {
+    state.currentUser = { ...state.currentUser, ...fields }
+  }
+
+  function updateReview(id, fields) {
+    const review = state.reviews.find(r => r.id === id)
+    if (review) Object.assign(review, fields)
+  }
 
   return {
     state,
