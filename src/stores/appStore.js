@@ -1,4 +1,5 @@
 ﻿import { computed, reactive } from 'vue'
+import { seedGames, seedReviews } from '../data/games'
 
 // ── API base URL — update to match your server path ──────────
 const API_BASE = import.meta.env.BASE_URL + 'resources/apis.php'
@@ -59,7 +60,46 @@ const state = reactive({
   reviews: [],
   currentUser: loadCurrentUser(),
   votes: {},
+  apiError: '',
 })
+
+function normaliseGame(game) {
+  return {
+    ...game,
+    rating: Number(game.rating || 0),
+    likes: Number(game.likes || 0),
+    releaseYear: Number(game.releaseYear || game.release_year || 0),
+    platform: Array.isArray(game.platform)
+      ? game.platform
+      : String(game.platform || '').split(',').map(s => s.trim()).filter(Boolean),
+    tags: Array.isArray(game.tags)
+      ? game.tags
+      : String(game.tags || '').split(',').map(s => s.trim()).filter(Boolean),
+    min: game.min || {
+      cpu: game.minCpu || game.min_cpu || '',
+      gpu: game.minGpu || game.min_gpu || '',
+      ram: Number(game.minRam || game.min_ram || 0),
+      storage: Number(game.minStorage || game.min_storage || 0),
+      os: game.minOs || game.min_os || '',
+    },
+    rec: game.rec || {
+      cpu: game.recCpu || game.rec_cpu || '',
+      gpu: game.recGpu || game.rec_gpu || '',
+      ram: Number(game.recRam || game.rec_ram || 0),
+      storage: Number(game.recStorage || game.rec_storage || 0),
+      os: game.recOs || game.rec_os || '',
+    },
+  }
+}
+
+function normaliseReview(review) {
+  return {
+    ...review,
+    id: Number(review.id),
+    score: Number(review.score || 0),
+    gameId: Number(review.gameId || review.game_id),
+  }
+}
 
 // ── Generic REST helpers ──────────────────────────────────────
 // Responses are converted to camelCase, request bodies to snake_case
@@ -120,13 +160,25 @@ export function useAppStore() {
   // ── Data loading (call once from App.vue) ──────────────────
 
   async function loadGames() {
-    const data = await apiGet('games')
-    state.games = data.map(g => ({ ...g, rating: Number(g.rating), likes: Number(g.likes) }))
+    try {
+      const data = await apiGet('games')
+      state.games = data.length ? data.map(normaliseGame) : seedGames.map(normaliseGame)
+      state.apiError = data.length ? '' : 'The backend returned no games, so demo games are being shown.'
+    } catch (error) {
+      console.warn('Using demo games because the backend API is unavailable.', error)
+      state.games = seedGames.map(normaliseGame)
+      state.apiError = 'The backend API is unavailable, so demo games are being shown.'
+    }
   }
 
   async function loadReviews() {
-    const data = await apiGet('reviews')
-    state.reviews = data.map(r => ({ ...r, score: Number(r.score), gameId: Number(r.gameId) }))
+    try {
+      const data = await apiGet('reviews')
+      state.reviews = data.length ? data.map(normaliseReview) : seedReviews.map(normaliseReview)
+    } catch (error) {
+      console.warn('Using demo reviews because the backend API is unavailable.', error)
+      state.reviews = seedReviews.map(normaliseReview)
+    }
   }
 
   // ── Auth ───────────────────────────────────────────────────
