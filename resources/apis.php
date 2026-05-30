@@ -33,7 +33,7 @@ $parts    = array_values(array_filter(explode('/', trim($pathInfo, '/'))));
 
 $table = isset($parts[0]) ? preg_replace('/[^a-z0-9_]/i', '', $parts[0]) : '';
 $field = isset($parts[1]) ? preg_replace('/[^a-z0-9_]/i', '', $parts[1]) : '';
-$key   = isset($parts[2]) ? $parts[2] : '';
+$key   = isset($parts[2]) ? urldecode($parts[2]) : '';
 
 if (!$table || !in_array($table, $ALLOWED_TABLES)) {
     http_response_code(404);

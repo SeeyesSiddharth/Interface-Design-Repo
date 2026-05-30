@@ -107,6 +107,7 @@ function normaliseReview(review) {
 async function apiGet(table, field = '', value = '') {
   const snakeField = field ? toSnake(field) : ''
   const path = snakeField ? `${API_BASE}/${table}/${snakeField}/${encodeURIComponent(value)}` : `${API_BASE}/${table}`
+  console.log('apiGet path:', path)  // add this
   const res = await fetch(path)
   if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`)
   return res.json().then(keysToCamel)
@@ -183,14 +184,18 @@ export function useAppStore() {
 
   // ── Auth ───────────────────────────────────────────────────
 
-  async function login(email, password) {
+  async function login(emailOrPayload, password) {
+    const email = typeof emailOrPayload === 'object' ? emailOrPayload.email : emailOrPayload
+    const pass  = typeof emailOrPayload === 'object' ? emailOrPayload.password : password
+
     const rows = await apiGet('users', 'email', email)
     const user = rows[0]
-    if (!user || user.password !== password) return false
+    if (!user) return { ok: false, message: 'No account found with this email.' }
+    if (user.password !== pass) return { ok: false, message: 'Incorrect password.' }
     const profile = { id: Number(user.id), name: user.name, email: user.email, role: user.role }
     state.currentUser = profile
     persistUser(profile)
-    return true
+    return { ok: true }
   }
 
   async function register(payload) {
