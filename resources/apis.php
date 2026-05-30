@@ -1,70 +1,30 @@
 <?php
-// ============================================================
-// Simple REST API — supports multiple tables
-// Routes:  /apis.php/<table>
-//          /apis.php/<table>/<field>/<value>
-// Methods: GET, POST, PUT, DELETE
-// ============================================================
-
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Accept');
 
-// Pre-flight
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
-
-// ── DB connection ────────────────────────────────────────────
-$conn = mysqli_connect('localhost', 'root', '', 'gamebench');
-
-if (!$conn) {
-    http_response_code(500);
-    echo json_encode(['error' => 'Database connection failed: ' . mysqli_connect_error()]);
-    exit;
-}
-mysqli_set_charset($conn, 'utf8');
-
-// ── Allowed tables ───────────────────────────────────────────
-$ALLOWED_TABLES = ['games', 'reviews', 'game_platforms', 'game_tags', 'users'];
-
-// ── Parse path:  /<table>[/<field>/<value>] ──────────────────
-$pathInfo = isset($_SERVER['PATH_INFO']) ? $_SERVER['PATH_INFO'] : '';
-$parts    = array_values(array_filter(explode('/', trim($pathInfo, '/'))));
-
-$table = isset($parts[0]) ? preg_replace('/[^a-z0-9_]/i', '', $parts[0]) : '';
-$field = isset($parts[1]) ? preg_replace('/[^a-z0-9_]/i', '', $parts[1]) : '';
-$key   = isset($parts[2]) ? urldecode($parts[2]) : '';
-
-if (!$table || !in_array($table, $ALLOWED_TABLES)) {
-    http_response_code(404);
-    echo json_encode(['error' => "Unknown table '$table'. Allowed: " . implode(', ', $ALLOWED_TABLES)]);
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
     exit;
 }
 
-$method = $_SERVER['REQUEST_METHOD'];
-$input  = json_decode(file_get_contents('php://input'), true) ?? [];
+mysqli_report(MYSQLI_REPORT_OFF);
 
-// ── Helpers ──────────────────────────────────────────────────
-
-function buildSet(array $data, $conn): string {
-    $pairs = [];
-    foreach ($data as $col => $val) {
-        $col = preg_replace('/[^a-z0-9_]/i', '', $col);
-        if ($val === null) {
-            $pairs[] = "`$col` = NULL";
-        } else {
-            $escaped = mysqli_real_escape_string($conn, (string)$val);
-            $pairs[] = "`$col` = '$escaped'";
-        }
-    }
-    return implode(', ', $pairs);
+function send_json($data, int $status = 200): void
+{
+    http_response_code($status);
+    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
 }
 
-function esc($val, $conn): string {
-    return mysqli_real_escape_string($conn, (string)$val);
+function esc(string $value, mysqli $conn): string
+{
+    return mysqli_real_escape_string($conn, $value);
 }
 
-function fetchAll($result): array {
+function fetch_all_assoc($result): array
+{
     $rows = [];
     while ($row = mysqli_fetch_assoc($result)) {
         $rows[] = $row;
@@ -72,175 +32,403 @@ function fetchAll($result): array {
     return $rows;
 }
 
-// ── GET games — joins platforms and tags into arrays ─────────
-function getGames($conn, string $field, string $key): void {
-    $where = $field && $key
-        ? "WHERE g." . preg_replace('/[^a-z0-9_]/i', '', $field) . " = '" . esc($key, $conn) . "'"
-        : '';
+function build_set(array $data, mysqli $conn): string
+{
+    $pairs = [];
 
-    $res = mysqli_query($conn, "SELECT g.* FROM games g $where ORDER BY g.id");
-    if (!$res) {
-        http_response_code(500);
-        echo json_encode(['error' => mysqli_error($conn)]);
-        return;
+    foreach ($data as $col => $val) {
+        $col = preg_replace('/[^a-z0-9_]/i', '', (string)$col);
+
+        if ($col === '') {
+            continue;
+        }
+
+        if ($val === null) {
+            $pairs[] = "`$col` = NULL";
+        } else {
+            $escaped = mysqli_real_escape_string($conn, (string)$val);
+            $pairs[] = "`$col` = '$escaped'";
+        }
     }
-    $games = fetchAll($res);
-    if (!$games) { echo json_encode([]); return; }
 
-    $ids = implode(',', array_column($games, 'id'));
+    return implode(', ', $pairs);
+}
 
-    $platMap = [];
-    $pRes = mysqli_query($conn, "SELECT game_id, platform FROM game_platforms WHERE game_id IN ($ids)");
-    while ($row = mysqli_fetch_assoc($pRes)) {
-        $platMap[$row['game_id']][] = $row['platform'];
+function flatten_game(array $input): array
+{
+    $flat = [];
+
+    $scalar = [
+        'slug',
+        'title',
+        'studio',
+        'genre',
+        'release_year',
+        'rating',
+        'likes',
+        'cover_theme',
+        'summary',
+        'notes',
+    ];
+
+    foreach ($scalar as $key) {
+        if (array_key_exists($key, $input)) {
+            $flat[$key] = $input[$key];
+        }
+    }
+
+    foreach (['min', 'rec'] as $tier) {
+        if (!empty($input[$tier]) && is_array($input[$tier])) {
+            foreach ($input[$tier] as $col => $val) {
+                $safeCol = preg_replace('/[^a-z0-9_]/i', '', (string)$col);
+                if ($safeCol !== '') {
+                    $flat["{$tier}_{$safeCol}"] = $val;
+                }
+            }
+        }
+    }
+
+    return $flat;
+}
+
+function parse_route_parts(): array
+{
+    $pathInfo = $_SERVER['PATH_INFO'] ?? '';
+
+    if ($pathInfo === '' || $pathInfo === null) {
+        $requestUri = $_SERVER['REQUEST_URI'] ?? '';
+        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+
+        if ($requestUri !== '' && $scriptName !== '') {
+            $requestPath = parse_url($requestUri, PHP_URL_PATH);
+
+            if (is_string($requestPath) && str_starts_with($requestPath, $scriptName)) {
+                $pathInfo = substr($requestPath, strlen($scriptName));
+            }
+        }
+    }
+
+    $parts = array_values(array_filter(explode('/', trim((string)$pathInfo, '/'))));
+
+    if (empty($parts) && isset($_GET['table'])) {
+        $parts[] = (string)$_GET['table'];
+
+        if (isset($_GET['field'])) {
+            $parts[] = (string)$_GET['field'];
+        }
+
+        if (isset($_GET['key'])) {
+            $parts[] = (string)$_GET['key'];
+        }
+    }
+
+    $table = isset($parts[0]) ? preg_replace('/[^a-z0-9_]/i', '', (string)$parts[0]) : '';
+    $field = isset($parts[1]) ? preg_replace('/[^a-z0-9_]/i', '', (string)$parts[1]) : '';
+    $key = isset($parts[2]) ? urldecode((string)$parts[2]) : '';
+
+    return [$table, $field, $key];
+}
+
+function get_games(mysqli $conn, string $field = '', string $key = ''): void
+{
+    $where = '';
+
+    if ($field !== '' && $key !== '') {
+        $safeField = preg_replace('/[^a-z0-9_]/i', '', $field);
+        $safeKey = esc($key, $conn);
+        $where = "WHERE g.`$safeField` = '$safeKey'";
+    }
+
+    $sql = "SELECT g.* FROM games g $where ORDER BY g.id";
+    $res = mysqli_query($conn, $sql);
+
+    if (!$res) {
+        send_json(['error' => mysqli_error($conn)], 500);
+    }
+
+    $games = fetch_all_assoc($res);
+
+    if (!$games) {
+        send_json([]);
+    }
+
+    $ids = implode(',', array_map('intval', array_column($games, 'id')));
+
+    $platformMap = [];
+    $platformRes = mysqli_query(
+        $conn,
+        "SELECT game_id, platform FROM game_platforms WHERE game_id IN ($ids)"
+    );
+
+    if ($platformRes) {
+        while ($row = mysqli_fetch_assoc($platformRes)) {
+            $platformMap[$row['game_id']][] = $row['platform'];
+        }
     }
 
     $tagMap = [];
-    $tRes = mysqli_query($conn, "SELECT game_id, tag FROM game_tags WHERE game_id IN ($ids)");
-    while ($row = mysqli_fetch_assoc($tRes)) {
-        $tagMap[$row['game_id']][] = $row['tag'];
+    $tagRes = mysqli_query(
+        $conn,
+        "SELECT game_id, tag FROM game_tags WHERE game_id IN ($ids)"
+    );
+
+    if ($tagRes) {
+        while ($row = mysqli_fetch_assoc($tagRes)) {
+            $tagMap[$row['game_id']][] = $row['tag'];
+        }
     }
 
-    // Return raw snake_case rows — JS handles camelCase conversion.
-    // Platforms and tags are attached as arrays.
     foreach ($games as &$g) {
         $id = $g['id'];
-        $g['platform'] = $platMap[$id] ?? [];
-        $g['tags']     = $tagMap[$id] ?? [];
-        // Nest min/rec so JS can map them to { min: {}, rec: {} }
+
+        $g['platform'] = $platformMap[$id] ?? [];
+        $g['tags'] = $tagMap[$id] ?? [];
+
         $g['min'] = [
-            'cpu'     => $g['min_cpu'],
-            'gpu'     => $g['min_gpu'],
-            'ram'     => (int)$g['min_ram'],
+            'cpu' => $g['min_cpu'],
+            'gpu' => $g['min_gpu'],
+            'ram' => (int)$g['min_ram'],
             'storage' => (int)$g['min_storage'],
-            'os'      => $g['min_os'],
+            'os' => $g['min_os'],
         ];
+
         $g['rec'] = [
-            'cpu'     => $g['rec_cpu'],
-            'gpu'     => $g['rec_gpu'],
-            'ram'     => (int)$g['rec_ram'],
+            'cpu' => $g['rec_cpu'],
+            'gpu' => $g['rec_gpu'],
+            'ram' => (int)$g['rec_ram'],
             'storage' => (int)$g['rec_storage'],
-            'os'      => $g['rec_os'],
+            'os' => $g['rec_os'],
         ];
-        // Remove the flat columns so they aren't duplicated
-        foreach (['min_cpu','min_gpu','min_ram','min_storage','min_os',
-                  'rec_cpu','rec_gpu','rec_ram','rec_storage','rec_os'] as $col) {
+
+        foreach (
+            [
+                'min_cpu',
+                'min_gpu',
+                'min_ram',
+                'min_storage',
+                'min_os',
+                'rec_cpu',
+                'rec_gpu',
+                'rec_ram',
+                'rec_storage',
+                'rec_os',
+            ] as $col
+        ) {
             unset($g[$col]);
         }
     }
 
-    echo json_encode(array_values($games));
+    send_json(array_values($games));
 }
 
-// ── Flatten nested min/rec from JS payload ───────────────────
-function flattenGame(array $input): array {
-    $flat = [];
-    $scalar = ['slug','title','studio','genre','release_year','rating','likes','cover_theme','summary','notes'];
-    foreach ($scalar as $k) {
-        if (array_key_exists($k, $input)) $flat[$k] = $input[$k];
-    }
-    foreach (['min','rec'] as $tier) {
-        if (!empty($input[$tier]) && is_array($input[$tier])) {
-            foreach ($input[$tier] as $col => $val) {
-                $flat["{$tier}_{$col}"] = $val;
-            }
-        }
-    }
-    return $flat;
+// ── DB connection ──────────────────────────────────────────────
+$conn = mysqli_connect('localhost', 'root', '', 'gamebench');
+
+if (!$conn) {
+    send_json(
+        ['error' => 'Database connection failed: ' . mysqli_connect_error()],
+        500
+    );
 }
 
-// ── Route ────────────────────────────────────────────────────
+mysqli_set_charset($conn, 'utf8');
+
+$allowedTables = ['games', 'reviews', 'game_platforms', 'game_tags', 'users'];
+[$table, $field, $key] = parse_route_parts();
+
+if ($table === '' || !in_array($table, $allowedTables, true)) {
+    send_json(
+        ['error' => "Unknown table '$table'. Allowed: " . implode(', ', $allowedTables)],
+        404
+    );
+}
+
+$method = $_SERVER['REQUEST_METHOD'];
+$rawInput = file_get_contents('php://input');
+$input = json_decode($rawInput, true);
+$input = is_array($input) ? $input : [];
+
 switch ($method) {
-
     case 'GET':
         if ($table === 'games') {
-            getGames($conn, $field, $key);
-            break;
+            get_games($conn, $field, $key);
         }
-        $where = ($field && $key !== '') ? "WHERE `$field` = '" . esc($key, $conn) . "'" : '';
+
+        $where = '';
+        if ($field !== '' && $key !== '') {
+            $safeField = preg_replace('/[^a-z0-9_]/i', '', $field);
+            $safeKey = esc($key, $conn);
+            $where = "WHERE `$safeField` = '$safeKey'";
+        }
+
         $result = mysqli_query($conn, "SELECT * FROM `$table` $where");
-        if (!$result) { http_response_code(500); echo json_encode(['error' => mysqli_error($conn)]); break; }
-        echo json_encode(fetchAll($result));
+
+        if (!$result) {
+            send_json(['error' => mysqli_error($conn)], 500);
+        }
+
+        send_json(fetch_all_assoc($result));
         break;
 
     case 'POST':
-        if (empty($input)) { http_response_code(400); echo json_encode(['error' => 'Request body is empty or not valid JSON']); break; }
+        if (empty($input)) {
+            send_json(['error' => 'Request body is empty or not valid JSON'], 400);
+        }
 
         if ($table === 'games') {
-            $flat = flattenGame($input);
+            $flat = flatten_game($input);
+
             if (empty($flat['slug']) && !empty($flat['title'])) {
-                $flat['slug'] = strtolower(preg_replace('/[^a-z0-9]+/i', '-', trim($flat['title'])));
+                $flat['slug'] = strtolower(
+                    preg_replace('/[^a-z0-9]+/i', '-', trim((string)$flat['title']))
+                );
+                $flat['slug'] = trim($flat['slug'], '-');
             }
-            if (!mysqli_query($conn, "INSERT INTO `games` SET " . buildSet($flat, $conn))) {
-                http_response_code(500); echo json_encode(['error' => mysqli_error($conn)]); break;
+
+            $setClause = build_set($flat, $conn);
+
+            if ($setClause === '') {
+                send_json(['error' => 'No valid game fields were provided'], 400);
             }
+
+            if (!mysqli_query($conn, "INSERT INTO `games` SET $setClause")) {
+                send_json(['error' => mysqli_error($conn)], 500);
+            }
+
             $newId = mysqli_insert_id($conn);
+
             foreach (($input['platform'] ?? []) as $p) {
-                $p = esc(trim($p), $conn);
-                mysqli_query($conn, "INSERT IGNORE INTO game_platforms (game_id, platform) VALUES ($newId, '$p')");
+                $p = trim((string)$p);
+                if ($p === '') {
+                    continue;
+                }
+                $p = esc($p, $conn);
+                mysqli_query(
+                    $conn,
+                    "INSERT IGNORE INTO game_platforms (game_id, platform) VALUES ($newId, '$p')"
+                );
             }
+
             foreach (($input['tags'] ?? []) as $t) {
-                $t = esc(trim($t), $conn);
-                mysqli_query($conn, "INSERT IGNORE INTO game_tags (game_id, tag) VALUES ($newId, '$t')");
+                $t = trim((string)$t);
+                if ($t === '') {
+                    continue;
+                }
+                $t = esc($t, $conn);
+                mysqli_query(
+                    $conn,
+                    "INSERT IGNORE INTO game_tags (game_id, tag) VALUES ($newId, '$t')"
+                );
             }
-            echo json_encode(['id' => $newId]);
-            break;
+
+            send_json(['id' => $newId], 201);
         }
 
-        if (!mysqli_query($conn, "INSERT INTO `$table` SET " . buildSet($input, $conn))) {
-            http_response_code(500); echo json_encode(['error' => mysqli_error($conn)]); break;
+        $setClause = build_set($input, $conn);
+
+        if ($setClause === '') {
+            send_json(['error' => 'No valid fields were provided'], 400);
         }
-        echo json_encode(['id' => mysqli_insert_id($conn)]);
+
+        if (!mysqli_query($conn, "INSERT INTO `$table` SET $setClause")) {
+            send_json(['error' => mysqli_error($conn)], 500);
+        }
+
+        send_json(['id' => mysqli_insert_id($conn)], 201);
         break;
 
     case 'PUT':
-        if (!$field || $key === '') { http_response_code(400); echo json_encode(['error' => 'PUT requires /<table>/<field>/<value> in the path']); break; }
-        if (empty($input)) { http_response_code(400); echo json_encode(['error' => 'Request body is empty or not valid JSON']); break; }
+        if ($field === '' || $key === '') {
+            send_json(['error' => 'PUT requires /table/field/key in the path'], 400);
+        }
+
+        if (empty($input)) {
+            send_json(['error' => 'Request body is empty or not valid JSON'], 400);
+        }
 
         if ($table === 'games') {
-            $flat = flattenGame($input);
+            $flat = flatten_game($input);
+
             if (!empty($flat)) {
-                if (!mysqli_query($conn, "UPDATE `games` SET " . buildSet($flat, $conn) . " WHERE `$field` = '" . esc($key, $conn) . "'")) {
-                    http_response_code(500); echo json_encode(['error' => mysqli_error($conn)]); break;
+                $setClause = build_set($flat, $conn);
+                $safeField = preg_replace('/[^a-z0-9_]/i', '', $field);
+                $safeKey = esc($key, $conn);
+
+                if (!mysqli_query($conn, "UPDATE `games` SET $setClause WHERE `$safeField` = '$safeKey'")) {
+                    send_json(['error' => mysqli_error($conn)], 500);
                 }
             }
+
             $gameId = (int)$key;
-            if (isset($input['platform'])) {
+
+            if (isset($input['platform']) && is_array($input['platform'])) {
                 mysqli_query($conn, "DELETE FROM game_platforms WHERE game_id = $gameId");
+
                 foreach ($input['platform'] as $p) {
-                    $p = esc(trim($p), $conn);
-                    mysqli_query($conn, "INSERT IGNORE INTO game_platforms (game_id, platform) VALUES ($gameId, '$p')");
+                    $p = trim((string)$p);
+                    if ($p === '') {
+                        continue;
+                    }
+                    $p = esc($p, $conn);
+                    mysqli_query(
+                        $conn,
+                        "INSERT IGNORE INTO game_platforms (game_id, platform) VALUES ($gameId, '$p')"
+                    );
                 }
             }
-            if (isset($input['tags'])) {
+
+            if (isset($input['tags']) && is_array($input['tags'])) {
                 mysqli_query($conn, "DELETE FROM game_tags WHERE game_id = $gameId");
+
                 foreach ($input['tags'] as $t) {
-                    $t = esc(trim($t), $conn);
-                    mysqli_query($conn, "INSERT IGNORE INTO game_tags (game_id, tag) VALUES ($gameId, '$t')");
+                    $t = trim((string)$t);
+                    if ($t === '') {
+                        continue;
+                    }
+                    $t = esc($t, $conn);
+                    mysqli_query(
+                        $conn,
+                        "INSERT IGNORE INTO game_tags (game_id, tag) VALUES ($gameId, '$t')"
+                    );
                 }
             }
-            echo json_encode(['affected' => mysqli_affected_rows($conn)]);
-            break;
+
+            send_json(['affected' => mysqli_affected_rows($conn)]);
         }
 
-        if (!mysqli_query($conn, "UPDATE `$table` SET " . buildSet($input, $conn) . " WHERE `$field` = '" . esc($key, $conn) . "'")) {
-            http_response_code(500); echo json_encode(['error' => mysqli_error($conn)]); break;
+        $setClause = build_set($input, $conn);
+        $safeField = preg_replace('/[^a-z0-9_]/i', '', $field);
+        $safeKey = esc($key, $conn);
+
+        if ($setClause === '') {
+            send_json(['error' => 'No valid fields were provided'], 400);
         }
-        echo json_encode(['affected' => mysqli_affected_rows($conn)]);
+
+        if (!mysqli_query($conn, "UPDATE `$table` SET $setClause WHERE `$safeField` = '$safeKey'")) {
+            send_json(['error' => mysqli_error($conn)], 500);
+        }
+
+        send_json(['affected' => mysqli_affected_rows($conn)]);
         break;
 
     case 'DELETE':
-        if (!$field || $key === '') { http_response_code(400); echo json_encode(['error' => 'DELETE requires /<table>/<field>/<value> in the path']); break; }
-        if (!mysqli_query($conn, "DELETE FROM `$table` WHERE `$field` = '" . esc($key, $conn) . "'")) {
-            http_response_code(500); echo json_encode(['error' => mysqli_error($conn)]); break;
+        if ($field === '' || $key === '') {
+            send_json(['error' => 'DELETE requires /table/field/key in the path'], 400);
         }
-        echo json_encode(['affected' => mysqli_affected_rows($conn)]);
+
+        $safeField = preg_replace('/[^a-z0-9_]/i', '', $field);
+        $safeKey = esc($key, $conn);
+
+        if (!mysqli_query($conn, "DELETE FROM `$table` WHERE `$safeField` = '$safeKey'")) {
+            send_json(['error' => mysqli_error($conn)], 500);
+        }
+
+        send_json(['affected' => mysqli_affected_rows($conn)]);
         break;
 
     default:
-        http_response_code(405);
-        echo json_encode(['error' => 'Method not allowed']);
+        send_json(['error' => 'Method not allowed'], 405);
+        break;
 }
 
 mysqli_close($conn);
-?>

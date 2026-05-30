@@ -1,8 +1,14 @@
 ﻿import { computed, reactive } from 'vue'
 import { seedGames, seedReviews } from '../data/games'
 
-// ── API base URL — update to match your server path ──────────
-const API_BASE = import.meta.env.BASE_URL + 'resources/apis.php'
+// ── API base URL ───────────────────────────────────────────────
+// Set VITE_API_BASE in a .env file if your PHP API is hosted elsewhere.
+// Example: VITE_API_BASE=http://localhost/resources/apis.php
+const RAW_API_BASE =
+  (import.meta.env.VITE_API_BASE && String(import.meta.env.VITE_API_BASE).trim()) ||
+  'http://localhost/gamebench/resources/apis.php'
+
+const API_BASE = RAW_API_BASE.replace(/\/+$/, '')
 
 // ── Auth is kept entirely in localStorage (no server session) ─
 const AUTH_KEY = 'gamebench-user-v1'
@@ -24,8 +30,7 @@ function persistUser(user) {
   }
 }
 
-// ── snake_case <-> camelCase conversion ───────────────────────
-
+// ── snake_case <-> camelCase conversion ────────────────────────
 function toCamel(str) {
   return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
 }
@@ -36,21 +41,25 @@ function toSnake(str) {
 
 function keysToCamel(obj) {
   if (Array.isArray(obj)) return obj.map(keysToCamel)
+
   if (obj !== null && typeof obj === 'object') {
     return Object.fromEntries(
-      Object.entries(obj).map(([k, v]) => [toCamel(k), keysToCamel(v)])
+      Object.entries(obj).map(([k, v]) => [toCamel(k), keysToCamel(v)]),
     )
   }
+
   return obj
 }
 
 function keysToSnake(obj) {
   if (Array.isArray(obj)) return obj.map(keysToSnake)
+
   if (obj !== null && typeof obj === 'object') {
     return Object.fromEntries(
-      Object.entries(obj).map(([k, v]) => [toSnake(k), keysToSnake(v)])
+      Object.entries(obj).map(([k, v]) => [toSnake(k), keysToSnake(v)]),
     )
   }
+
   return obj
 }
 
@@ -66,15 +75,22 @@ const state = reactive({
 function normaliseGame(game) {
   return {
     ...game,
+    id: Number(game.id),
     rating: Number(game.rating || 0),
     likes: Number(game.likes || 0),
     releaseYear: Number(game.releaseYear || game.release_year || 0),
     platform: Array.isArray(game.platform)
       ? game.platform
-      : String(game.platform || '').split(',').map(s => s.trim()).filter(Boolean),
+      : String(game.platform || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean),
     tags: Array.isArray(game.tags)
       ? game.tags
-      : String(game.tags || '').split(',').map(s => s.trim()).filter(Boolean),
+      : String(game.tags || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean),
     min: game.min || {
       cpu: game.minCpu || game.min_cpu || '',
       gpu: game.minGpu || game.min_gpu || '',
@@ -101,50 +117,82 @@ function normaliseReview(review) {
   }
 }
 
-// ── Generic REST helpers ──────────────────────────────────────
-// Responses are converted to camelCase, request bodies to snake_case
-
-async function apiGet(table, field = '', value = '') {
+// ── Response helpers ───────────────────────────────────────────
+function buildPath(table, field = '', value = '') {
   const snakeField = field ? toSnake(field) : ''
-  const path = snakeField ? `${API_BASE}/${table}/${snakeField}/${encodeURIComponent(value)}` : `${API_BASE}/${table}`
-  console.log('apiGet path:', path)  // add this
-  const res = await fetch(path)
-  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`)
-  return res.json().then(keysToCamel)
+  return snakeField
+    ? `${API_BASE}/${table}/${snakeField}/${encodeURIComponent(value)}`
+    : `${API_BASE}/${table}`
+}
+
+function parseJsonSafely(raw, path) {
+  try {
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    throw new Error(`The server returned non-JSON content for ${path}: ${raw}`)
+  }
+}
+
+async function readJsonResponse(res, path) {
+  const raw = await res.text()
+
+  if (!res.ok) {
+    throw new Error(`${res.status} ${res.statusText} from ${path}: ${raw}`)
+  }
+
+  return keysToCamel(parseJsonSafely(raw, path))
+}
+
+// ── Generic REST helpers ───────────────────────────────────────
+// Responses are converted to camelCase, request bodies to snake_case
+async function apiGet(table, field = '', value = '') {
+  const path = buildPath(table, field, value)
+  const res = await fetch(path, {
+    headers: {
+      Accept: 'application/json',
+    },
+  })
+  return readJsonResponse(res, path)
 }
 
 async function apiPost(table, body) {
-  const res = await fetch(`${API_BASE}/${table}`, {
+  const path = buildPath(table)
+  const res = await fetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(keysToSnake(body)),
   })
-  if (!res.ok) throw new Error(`POST ${table} failed: ${res.status}`)
-  return res.json().then(keysToCamel)
+  return readJsonResponse(res, path)
 }
 
 async function apiPut(table, field, value, body) {
-  const snakeField = toSnake(field)
-  const path = `${API_BASE}/${table}/${snakeField}/${encodeURIComponent(value)}`
+  const path = buildPath(table, field, value)
   const res = await fetch(path, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(keysToSnake(body)),
   })
-  if (!res.ok) throw new Error(`PUT ${path} failed: ${res.status}`)
-  return res.json().then(keysToCamel)
+  return readJsonResponse(res, path)
 }
 
 async function apiDelete(table, field, value) {
-  const snakeField = toSnake(field)
-  const path = `${API_BASE}/${table}/${snakeField}/${encodeURIComponent(value)}`
-  const res = await fetch(path, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`DELETE ${path} failed: ${res.status}`)
-  return res.json().then(keysToCamel)
+  const path = buildPath(table, field, value)
+  const res = await fetch(path, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+    },
+  })
+  return readJsonResponse(res, path)
 }
 
-// ── Slug helper ───────────────────────────────────────────────
-
+// ── Slug helper ────────────────────────────────────────────────
 function makeSlug(title) {
   return title
     .toLowerCase()
@@ -152,19 +200,23 @@ function makeSlug(title) {
     .replace(/(^-|-$)/g, '')
 }
 
-// ── Composable ───────────────────────────────────────────────
-
+// ── Composable ────────────────────────────────────────────────
 export function useAppStore() {
   const isAuthenticated = computed(() => Boolean(state.currentUser))
   const isAdmin = computed(() => state.currentUser?.role === 'admin')
 
-  // ── Data loading (call once from App.vue) ──────────────────
-
+  // ── Data loading (call once from App.vue) ───────────────────
   async function loadGames() {
     try {
       const data = await apiGet('games')
-      state.games = data.length ? data.map(normaliseGame) : seedGames.map(normaliseGame)
-      state.apiError = data.length ? '' : 'The backend returned no games, so demo games are being shown.'
+      state.games = Array.isArray(data) && data.length
+        ? data.map(normaliseGame)
+        : seedGames.map(normaliseGame)
+
+      state.apiError =
+        Array.isArray(data) && data.length
+          ? ''
+          : 'The backend returned no games, so demo games are being shown.'
     } catch (error) {
       console.warn('Using demo games because the backend API is unavailable.', error)
       state.games = seedGames.map(normaliseGame)
@@ -175,40 +227,66 @@ export function useAppStore() {
   async function loadReviews() {
     try {
       const data = await apiGet('reviews')
-      state.reviews = data.length ? data.map(normaliseReview) : seedReviews.map(normaliseReview)
+      state.reviews = Array.isArray(data) && data.length
+        ? data.map(normaliseReview)
+        : seedReviews.map(normaliseReview)
     } catch (error) {
       console.warn('Using demo reviews because the backend API is unavailable.', error)
       state.reviews = seedReviews.map(normaliseReview)
     }
   }
 
-  // ── Auth ───────────────────────────────────────────────────
-
+  // ── Auth ────────────────────────────────────────────────────
   async function login(emailOrPayload, password) {
     const email = typeof emailOrPayload === 'object' ? emailOrPayload.email : emailOrPayload
-    const pass  = typeof emailOrPayload === 'object' ? emailOrPayload.password : password
+    const pass = typeof emailOrPayload === 'object' ? emailOrPayload.password : password
 
     const rows = await apiGet('users', 'email', email)
-    const user = rows[0]
-    if (!user) return { ok: false, message: 'No account found with this email.' }
-    if (user.password !== pass) return { ok: false, message: 'Incorrect password.' }
-    const profile = { id: Number(user.id), name: user.name, email: user.email, role: user.role }
+    const user = rows?.[0]
+
+    if (!user) {
+      return { ok: false, message: 'No account found with this email.' }
+    }
+
+    if (user.password !== pass) {
+      return { ok: false, message: 'Incorrect password.' }
+    }
+
+    const profile = {
+      id: Number(user.id),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    }
+
     state.currentUser = profile
     persistUser(profile)
+
     return { ok: true }
   }
 
   async function register(payload) {
     const existing = await apiGet('users', 'email', payload.email)
-    if (existing.length > 0) {
+
+    if (Array.isArray(existing) && existing.length > 0) {
       return { ok: false, message: 'An account with this email already exists.' }
     }
+
     const allUsers = await apiGet('users')
-    const role = allUsers.length === 0 ? 'admin' : 'member'
+    const role = Array.isArray(allUsers) && allUsers.length === 0 ? 'admin' : 'member'
+
     const result = await apiPost('users', { ...payload, role })
-    const profile = { id: result.id, name: payload.name, email: payload.email, role }
+
+    const profile = {
+      id: Number(result.id),
+      name: payload.name,
+      email: payload.email,
+      role,
+    }
+
     state.currentUser = profile
     persistUser(profile)
+
     return { ok: true }
   }
 
@@ -222,8 +300,7 @@ export function useAppStore() {
     persistUser(state.currentUser)
   }
 
-  // ── Games ──────────────────────────────────────────────────
-
+  // ── Games ───────────────────────────────────────────────────
   async function addGame(payload) {
     await apiPost('games', {
       ...payload,
@@ -234,8 +311,18 @@ export function useAppStore() {
       coverTheme: payload.coverTheme || 'cover-space',
       platform: Array.isArray(payload.platform)
         ? payload.platform
-        : String(payload.platform).split(',').map(s => s.trim()),
+        : String(payload.platform)
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean),
+      tags: Array.isArray(payload.tags)
+        ? payload.tags
+        : String(payload.tags || '')
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean),
     })
+
     await loadGames()
   }
 
@@ -245,7 +332,20 @@ export function useAppStore() {
       slug: makeSlug(payload.title),
       releaseYear: Number(payload.releaseYear),
       rating: Number(payload.rating),
+      platform: Array.isArray(payload.platform)
+        ? payload.platform
+        : String(payload.platform || '')
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean),
+      tags: Array.isArray(payload.tags)
+        ? payload.tags
+        : String(payload.tags || '')
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean),
     })
+
     await loadGames()
   }
 
@@ -258,6 +358,7 @@ export function useAppStore() {
   async function toggleLike(gameId) {
     const key = `${state.currentUser?.email || 'guest'}-${gameId}`
     const game = state.games.find(g => g.id === gameId)
+
     if (!game) return
 
     const newLikes = state.votes[key]
@@ -265,7 +366,9 @@ export function useAppStore() {
       : game.likes + 1
 
     await apiPut('games', 'id', gameId, { likes: newLikes })
+
     game.likes = newLikes
+
     if (state.votes[key]) {
       delete state.votes[key]
     } else {
@@ -273,8 +376,7 @@ export function useAppStore() {
     }
   }
 
-  // ── Reviews ────────────────────────────────────────────────
-
+  // ── Reviews ─────────────────────────────────────────────────
   async function addReview(payload) {
     await apiPost('reviews', { ...payload, score: Number(payload.score) })
     await loadReviews()
@@ -294,23 +396,19 @@ export function useAppStore() {
     state,
     isAuthenticated,
     isAdmin,
-
     // Data loading
     loadGames,
     loadReviews,
-
     // Auth
     login,
     register,
     logout,
     updateCurrentUser,
-
     // Games
     addGame,
     updateGame,
     deleteGame,
     toggleLike,
-
     // Reviews
     addReview,
     updateReview,
