@@ -15,9 +15,7 @@ header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 // ── DB connection ────────────────────────────────────────────
-// !! Change these credentials to match your environment !!
-$conn = mysqli_connect('feenix-mariadb.swin.edu.au', 's105571938', '020496', 's105571938_db');
-// $conn = mysqli_connect('localhost', 'root', '', 'gamebench');
+$conn = mysqli_connect('localhost', 'root', '', 'gamebench');
 
 if (!$conn) {
     http_response_code(500);
