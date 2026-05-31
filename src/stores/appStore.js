@@ -207,7 +207,12 @@ export function useAppStore() {
     const allUsers = await apiGet('users')
     const role = allUsers.length === 0 ? 'admin' : 'member'
     const result = await apiPost('users', { ...payload, role })
-    const profile = { id: result.id, name: payload.name, email: payload.email, role }
+    
+    // Fetch the newly created user to get created_at
+    const newUserRows = await apiGet('users', 'id', result.id)
+    const newUser = newUserRows[0]
+    
+    const profile = { id: result.id, name: payload.name, email: payload.email, role, created: newUser?.createdAt || new Date().toISOString() }
     state.currentUser = profile
     persistUser(profile)
     return { ok: true }
