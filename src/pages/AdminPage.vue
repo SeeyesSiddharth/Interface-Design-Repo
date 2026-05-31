@@ -41,7 +41,7 @@ function removeGame(id) {
 </script>
 
 <template>
-  <PageHeader title="Admin Management" text="A simple edit/delete page that demonstrates authorised CRUD operations." />
+  <PageHeader title="Admin Management" text="Manage the current catalogue of games."/>
 
   <section class="section-band">
     <div class="container">
