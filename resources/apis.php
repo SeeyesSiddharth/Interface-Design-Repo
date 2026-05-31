@@ -11,19 +11,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 mysqli_report(MYSQLI_REPORT_OFF);
 
-function send_json($data, int $status = 200): void
+function send_json($data, $status = 200)
 {
     http_response_code($status);
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
 
-function esc(string $value, mysqli $conn): string
+function esc($value, $conn)
 {
     return mysqli_real_escape_string($conn, $value);
 }
 
-function fetch_all_assoc($result): array
+function fetch_all_assoc($result)
 {
     $rows = [];
     while ($row = mysqli_fetch_assoc($result)) {
@@ -32,7 +32,7 @@ function fetch_all_assoc($result): array
     return $rows;
 }
 
-function build_set(array $data, mysqli $conn): string
+function build_set($data, $conn)
 {
     $pairs = [];
 
@@ -54,7 +54,7 @@ function build_set(array $data, mysqli $conn): string
     return implode(', ', $pairs);
 }
 
-function flatten_game(array $input): array
+function flatten_game($input)
 {
     $flat = [];
 
@@ -91,18 +91,18 @@ function flatten_game(array $input): array
     return $flat;
 }
 
-function parse_route_parts(): array
+function parse_route_parts()
 {
-    $pathInfo = $_SERVER['PATH_INFO'] ?? '';
+    $pathInfo = isset($_SERVER['PATH_INFO']) ? $_SERVER['PATH_INFO'] : '';
 
     if ($pathInfo === '' || $pathInfo === null) {
-        $requestUri = $_SERVER['REQUEST_URI'] ?? '';
-        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+        $requestUri = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '';
+        $scriptName = isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '';
 
         if ($requestUri !== '' && $scriptName !== '') {
             $requestPath = parse_url($requestUri, PHP_URL_PATH);
 
-            if (is_string($requestPath) && str_starts_with($requestPath, $scriptName)) {
+            if (is_string($requestPath) && strpos($requestPath, $scriptName) === 0) {
                 $pathInfo = substr($requestPath, strlen($scriptName));
             }
         }
@@ -129,7 +129,7 @@ function parse_route_parts(): array
     return [$table, $field, $key];
 }
 
-function get_games(mysqli $conn, string $field = '', string $key = ''): void
+function get_games($conn, $field, $key)
 {
     $where = '';
 
@@ -152,7 +152,11 @@ function get_games(mysqli $conn, string $field = '', string $key = ''): void
         send_json([]);
     }
 
-    $ids = implode(',', array_map('intval', array_column($games, 'id')));
+    $rawIds = [];
+    foreach ($games as $g) {
+        $rawIds[] = (int)$g['id'];
+    }
+    $ids = implode(',', $rawIds);
 
     $platformMap = [];
     $platformRes = mysqli_query(
@@ -181,8 +185,8 @@ function get_games(mysqli $conn, string $field = '', string $key = ''): void
     foreach ($games as &$g) {
         $id = $g['id'];
 
-        $g['platform'] = $platformMap[$id] ?? [];
-        $g['tags'] = $tagMap[$id] ?? [];
+        $g['platform'] = isset($platformMap[$id]) ? $platformMap[$id] : [];
+        $g['tags'] = isset($tagMap[$id]) ? $tagMap[$id] : [];
 
         $g['min'] = [
             'cpu' => $g['min_cpu'],
@@ -222,7 +226,8 @@ function get_games(mysqli $conn, string $field = '', string $key = ''): void
 }
 
 // ── DB connection ──────────────────────────────────────────────
-$conn = mysqli_connect('localhost', 'root', '', 'gamebench');
+// $conn = mysqli_connect('localhost', 'root', '', 'gamebench');
+$conn = mysqli_connect('feenix-mariadb.swin.edu.au', 's105571938', '020496', 's105571938_db');
 
 if (!$conn) {
     send_json(
@@ -234,7 +239,7 @@ if (!$conn) {
 mysqli_set_charset($conn, 'utf8');
 
 $allowedTables = ['games', 'reviews', 'game_platforms', 'game_tags', 'users'];
-[$table, $field, $key] = parse_route_parts();
+list($table, $field, $key) = parse_route_parts();
 
 if ($table === '' || !in_array($table, $allowedTables, true)) {
     send_json(
@@ -297,7 +302,8 @@ switch ($method) {
 
             $newId = mysqli_insert_id($conn);
 
-            foreach (($input['platform'] ?? []) as $p) {
+            $platforms = isset($input['platform']) ? $input['platform'] : [];
+            foreach ($platforms as $p) {
                 $p = trim((string)$p);
                 if ($p === '') {
                     continue;
@@ -309,7 +315,8 @@ switch ($method) {
                 );
             }
 
-            foreach (($input['tags'] ?? []) as $t) {
+            $tags = isset($input['tags']) ? $input['tags'] : [];
+            foreach ($tags as $t) {
                 $t = trim((string)$t);
                 if ($t === '') {
                     continue;
