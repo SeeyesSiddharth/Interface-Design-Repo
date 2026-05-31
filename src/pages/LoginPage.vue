@@ -8,10 +8,12 @@ const router = useRouter()
 const store = useAppStore()
 const error = ref('')
 const isLoading = ref(false)
+const showPassword = ref(false) // New state for password toggle
 
 const form = reactive({
   email: '',
   password: '',
+  rememberMe: false, // New state for Remember Me
 })
 
 async function submit() {
@@ -63,16 +65,39 @@ async function submit() {
           />
         </div>
 
-        <div class="mb-4">
+        <div class="mb-3">
           <label class="form-label" for="password">Password</label>
+          <div class="input-group">
+            <input 
+              id="password" 
+              v-model="form.password" 
+              class="form-control" 
+              :type="showPassword ? 'text' : 'password'" 
+              autocomplete="current-password"
+              required 
+            />
+            <button 
+              class="btn btn-outline-secondary" 
+              type="button" 
+              @click="showPassword = !showPassword"
+              title="Toggle password visibility"
+            >
+              {{ showPassword ? 'Hide' : 'Show' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Remember Me Checkbox -->
+        <div class="mb-4 form-check">
           <input 
-            id="password" 
-            v-model="form.password" 
-            class="form-control" 
-            type="password" 
-            autocomplete="current-password"
-            required 
+            id="rememberMe" 
+            v-model="form.rememberMe" 
+            class="form-check-input" 
+            type="checkbox" 
           />
+          <label class="form-check-label text-secondary small" for="rememberMe">
+            Remember me for 30 days
+          </label>
         </div>
 
         <button 
@@ -80,15 +105,16 @@ async function submit() {
           type="submit" 
           :disabled="isLoading"
         >
+          <span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
           {{ isLoading ? 'Logging in...' : 'Login' }}
         </button>
         
         <div class="text-center mt-3">
           <p class="small text-secondary mb-0">
-            Dont have an account? <RouterLink to="/register">Register here</RouterLink>.
+            Don't have an account? <RouterLink to="/register">Register here</RouterLink>.
           </p>
         </div>
       </form>
     </div>
   </section>
-</template> 
+</template>
