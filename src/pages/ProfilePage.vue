@@ -115,6 +115,7 @@ const pagedReviews = computed(() => {
               <h2>{{ store.state.currentUser.name }}</h2>
               <p class="text-secondary mb-1">{{ store.state.currentUser.email }}</p>
               <p class="mb-3">Role: <strong>{{ store.state.currentUser.role }}</strong></p>
+              <p class="mb-3">Member since: <strong>{{ new Date(store.state.currentUser.created.replace(' ', 'T')).toLocaleDateString() }}</strong></p>
               <button class="btn btn-outline-dark btn-sm" @click="openEditProfile">
                 Edit Profile
               </button>

@@ -245,4 +245,7 @@ INSERT INTO reviews (id, game_id, author, score, comment) VALUES
 (3, 5, 'Kai', 4, 'Fantastic atmosphere, but the recommended requirements should be explained carefully.'),
 (4, 10, 'Siddh', 4, 'Useful example for showing CPU-heavy games in the requirements guide.');
 
+INSERT INTO users (id, name, email, password, role) VALUES
+(1, 'Demo User', 'demo@gamebench.test', 'password123', 'admin');
+
 COMMIT;
