@@ -66,6 +66,7 @@ const state = reactive({
 function normaliseGame(game) {
   return {
     ...game,
+    id: Number(game.id),
     rating: Number(game.rating || 0),
     likes: Number(game.likes || 0),
     releaseYear: Number(game.releaseYear || game.release_year || 0),
