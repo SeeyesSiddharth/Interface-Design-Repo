@@ -132,7 +132,7 @@ async function submit() {
   </div>
 
   <template v-else>
-    <PageHeader title="Submit Game" text="A validated content creation form for authorised users." />
+    <PageHeader title="Submit Game" text="Submit a game to the catalogue, along with its details and minimum and recommended specs." />
 
     <section class="section-band">
       <div class="container">
