@@ -157,40 +157,42 @@ const pagedReviews = computed(() => {
 
           <p v-if="myReviews.length === 0" class="text-secondary mb-3">No reviews yet.</p>
 
-          <div v-else class="row g-3 mb-3">
-            <div v-for="review in pagedReviews" :key="review.id" class="col-md-6 col-lg-4">
-              <div class="review-card p-3 h-100">
-                <!-- View mode -->
-                <template v-if="editingReviewId !== review.id">
-                  <div class="d-flex align-items-start justify-content-between gap-2 mb-1">
-                    <span class="fw-bold small">{{ gameTitle(review.gameId) }}</span>
-                    <span class="badge text-bg-warning flex-shrink-0">{{ review.score }}/5</span>
-                  </div>
-                  <p class="small text-secondary mb-2 review-comment">{{ review.comment }}</p>
-                  <div class="d-flex gap-2 mt-auto">
-                    <button class="btn btn-sm btn-outline-secondary" @click="startEditReview(review)">Edit</button>
-                    <button class="btn btn-sm btn-outline-danger" @click="store.deleteReview(review.id)">Delete</button>
-                  </div>
-                </template>
+          <Transition name="page-fade" mode="out-in">
+            <div v-if="myReviews.length > 0" :key="currentPage" class="row g-3 mb-3">
+              <div v-for="review in pagedReviews" :key="review.id" class="col-md-6 col-lg-4">
+                <div class="review-card p-3 h-100">
+                  <!-- View mode -->
+                  <template v-if="editingReviewId !== review.id">
+                    <div class="d-flex align-items-start justify-content-between gap-2 mb-1">
+                      <span class="fw-bold small">{{ gameTitle(review.gameId) }}</span>
+                      <span class="badge text-bg-warning flex-shrink-0">{{ review.score }}/5</span>
+                    </div>
+                    <p class="small text-secondary mb-2 review-comment">{{ review.comment }}</p>
+                    <div class="d-flex gap-2 mt-auto">
+                      <button class="btn btn-sm btn-outline-secondary" @click="startEditReview(review)">Edit</button>
+                      <button class="btn btn-sm btn-outline-danger" @click="store.deleteReview(review.id)">Delete</button>
+                    </div>
+                  </template>
 
-                <!-- Edit mode -->
-                <template v-else>
-                  <div class="fw-bold small mb-2">{{ gameTitle(review.gameId) }}</div>
-                  <textarea v-model="editComment" class="form-control form-control-sm mb-2" rows="3" />
-                  <div class="d-flex align-items-center gap-2 mb-2">
-                    <label class="small mb-0">Score:</label>
-                    <select v-model="editScore" class="form-select form-select-sm w-auto">
-                      <option v-for="n in 5" :key="n" :value="n">{{ n }}</option>
-                    </select>
-                  </div>
-                  <div class="d-flex gap-2">
-                    <button class="btn btn-sm btn-success" @click="saveReview(review.id)">Save</button>
-                    <button class="btn btn-sm btn-outline-secondary" @click="cancelEditReview">Cancel</button>
-                  </div>
-                </template>
+                  <!-- Edit mode -->
+                  <template v-else>
+                    <div class="fw-bold small mb-2">{{ gameTitle(review.gameId) }}</div>
+                    <textarea v-model="editComment" class="form-control form-control-sm mb-2" rows="3" />
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                      <label class="small mb-0">Score:</label>
+                      <select v-model="editScore" class="form-select form-select-sm w-auto">
+                        <option v-for="n in 5" :key="n" :value="n">{{ n }}</option>
+                      </select>
+                    </div>
+                    <div class="d-flex gap-2">
+                      <button class="btn btn-sm btn-success" @click="saveReview(review.id)">Save</button>
+                      <button class="btn btn-sm btn-outline-secondary" @click="cancelEditReview">Cancel</button>
+                    </div>
+                  </template>
+                </div>
               </div>
             </div>
-          </div>
+          </Transition>
 
           <!-- Pagination — always visible -->
           <nav class="d-flex justify-content-center gap-2 mt-2" aria-label="Reviews pagination">
@@ -251,5 +253,28 @@ const pagedReviews = computed(() => {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* Pagination fade */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+/* Card hover lift */
+.review-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.review-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
 }
 </style>
